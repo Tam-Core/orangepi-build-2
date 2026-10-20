@@ -1599,6 +1599,15 @@ prepare_host()
 			;;
 		esac
 
+		# The experimental Rock 5B port needs only its AArch64 U-Boot and
+		# kernel compilers, rather than the full multi-board toolchain set.
+		if [[ ${BOARD} == rock5b && ${BOARDFAMILY} == rockchip-rk3588 ]]; then
+			toolchains=(
+				"gcc-linaro-7.4.1-2019.02-x86_64_aarch64-linux-gnu.tar.xz"
+				"gcc-arm-11.2-2022.02-x86_64-aarch64-none-linux-gnu.tar.xz"
+			)
+		fi
+
 		USE_TORRENT_STATUS=${USE_TORRENT}
 		USE_TORRENT="no"
 		for toolchain in ${toolchains[@]}; do

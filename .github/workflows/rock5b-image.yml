@@ -1,0 +1,121 @@
+name: Rock 5B CLI image build
+
+on:
+  push:
+    branches: [rock5b-minimal-microsd]
+    paths:
+      - '.github/workflows/rock5b-image.yml'
+      - 'scripts/**'
+      - 'config/**'
+      - 'external/config/boards/rock5b.conf'
+      - 'external/config/sources/families/**'
+      - 'tests/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rock5b-image
+  cancel-in-progress: true
+
+jobs:
+  image:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Static preflight
+        run: bash tests/rock5b-preflight.sh
+      - name: Prepare disposable build runner
+        run: |
+          # These are unused SDKs on this disposable GitHub-hosted Linux VM.
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup
+          df -h .
+          sudo apt-get update
+          sudo apt-get install -y gawk uuid-runtime acl dialog whiptail
+      - name: Configure staged CLI build
+        run: |
+          mkdir -p output/debug userpatches
+          touch .ignore_changes
+          cp config/rock5b-minimal.conf userpatches/config-rock5b-ci.conf
+          cp config/rock5b-customize.sh userpatches/customize-image.sh
+      - uses: actions/cache@v4
+        with:
+          path: output/debs
+          key: rock5b-debs-v1-${{ hashFiles('external/config/boards/rock5b.conf', 'external/config/sources/families/**', 'external/config/kernel/linux-rockchip-rk3588-next.config') }}
+      - name: Build U-Boot
+        timeout-minutes: 30
+        shell: bash
+        run: |
+          set -o pipefail
+          sudo env TERM=xterm bash build.sh rock5b-ci BUILD_OPT=u-boot 2>&1 | tee output/rock5b-uboot.log
+      - name: Build Linux kernel and DTBs
+        timeout-minutes: 180
+        shell: bash
+        run: |
+          set -o pipefail
+          sudo env TERM=xterm bash build.sh rock5b-ci BUILD_OPT=kernel 2>&1 | tee output/rock5b-kernel.log
+      - name: Preserve compiled packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: rock5b-compiled-packages
+          path: output/debs/**/*.deb
+          retention-days: 14
+      - name: Build Debian CLI microSD image
+        timeout-minutes: 60
+        shell: bash
+        run: |
+          set -o pipefail
+          sudo env TERM=xterm bash build.sh rock5b-ci BUILD_OPT=image 2>&1 | tee output/rock5b-image.log
+      - name: Require generated image and record provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p output/images
+          cp docs/rock5b-flashing.md output/images/FLASHING.md
+          cp -r docs/licenses output/images/licenses
+          mapfile -t images < <(find output/images -type f -name '*.img')
+          (( ${#images[@]} > 0 ))
+          mkdir -p output/verification
+          git rev-parse HEAD > output/verification/source-revision.txt
+          git status --porcelain > output/verification/source-status.txt
+          find kernel u-boot-radxa-rock5b external/cache/sources -type d -name .git -prune |
+            while read -r gitdir; do
+              printf '%s ' "${gitdir%/.git}"
+              git -C "${gitdir%/.git}" rev-parse HEAD
+            done > output/verification/dependency-revisions.txt
+          for img in "${images[@]}"; do
+            sudo fdisk -l "$img" > "output/verification/$(basename "$img").partitions.txt"
+            sudo bash tests/rock5b-image-check.sh "$img" "output/verification/$(basename "$img").checks"
+            (cd "$(dirname "$img")" && sha256sum "$(basename "$img")") >> output/images/SHA256SUMS
+            xz -T2 -k "$img"
+            xz -t "$img.xz"
+            (cd "$(dirname "$img")" && sha256sum "$(basename "$img.xz")") >> output/images/SHA256SUMS
+          done
+          printf '%s\n' 'Image generated; hardware boot and peripherals remain UNTESTED.' > output/verification/STATUS.txt
+      - name: Preserve build evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rock5b-build-evidence
+          path: |
+            output/rock5b-*.log
+            output/debug/
+            output/verification/
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Preserve image
+        uses: actions/upload-artifact@v4
+        with:
+          name: rock5b-debian13-cli-image
+          path: |
+            output/images/**/*.img.xz
+            output/images/SHA256SUMS
+            output/images/FLASHING.md
+            output/images/licenses/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14

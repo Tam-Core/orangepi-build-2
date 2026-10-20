@@ -1,0 +1,89 @@
+name: Rock 5B CLI image build
+
+on:
+  push:
+    branches: [feature/rock5b-debian13-bringup]
+    paths:
+      - '.github/workflows/rock5b-image.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rock5b-image
+  cancel-in-progress: false
+
+jobs:
+  image:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Static preflight
+        run: bash tests/rock5b-preflight.sh
+      - name: Prepare disposable build runner
+        run: |
+          # These are unused SDKs on this disposable GitHub-hosted Linux VM.
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup
+          df -h .
+          sudo apt-get update
+          sudo apt-get install -y gawk uuid-runtime acl dialog whiptail
+      - name: Build CLI microSD image
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p output/debug userpatches
+          touch .ignore_changes
+          sudo env TERM=xterm bash build.sh \
+            LIB_TAG=feature/rock5b-debian13-bringup \
+            BOARD=rock5b BRANCH=next RELEASE=trixie BUILD_OPT=image \
+            KERNEL_CONFIGURE=no BUILD_DESKTOP=no BUILD_MINIMAL=yes \
+            USE_TORRENT=no DOWNLOAD_MIRROR=mainline GITHUB_MIRROR=github \
+            NO_APT_CACHER=yes SYNC_CLOCK=no USE_CCACHE=no \
+            EXTRAWIFI=no INSTALL_HEADERS=no BUILD_KSRC=no INSTALL_KSRC=no \
+            COMPRESS_OUTPUTIMAGE=sha,img PROGRESS_DISPLAY=plain \
+            PROGRESS_LOG_TO_FILE=yes 2>&1 | tee output/rock5b-build.log
+      - name: Require generated image and record provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t images < <(find output/images -type f -name '*.img')
+          (( ${#images[@]} > 0 ))
+          mkdir -p output/verification
+          git rev-parse HEAD > output/verification/source-revision.txt
+          git status --porcelain > output/verification/source-status.txt
+          find kernel u-boot-radxa-rock5b external/cache/sources -type d -name .git -prune |
+            while read -r gitdir; do
+              printf '%s ' "${gitdir%/.git}"
+              git -C "${gitdir%/.git}" rev-parse HEAD
+            done > output/verification/dependency-revisions.txt
+          for img in "${images[@]}"; do
+            sudo fdisk -l "$img" > "output/verification/$(basename "$img").partitions.txt"
+            sha256sum "$img" >> output/verification/SHA256SUMS
+            xz -T2 -k "$img"
+            xz -t "$img.xz"
+            sha256sum "$img.xz" >> output/verification/SHA256SUMS
+          done
+          printf '%s\n' 'Image generated; hardware boot and peripherals remain UNTESTED.' > output/verification/STATUS.txt
+      - name: Preserve build evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rock5b-build-evidence
+          path: |
+            output/rock5b-build.log
+            output/debug/
+            output/verification/
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Preserve image
+        uses: actions/upload-artifact@v4
+        with:
+          name: rock5b-debian13-cli-image
+          path: output/images/**/*.img.xz
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14

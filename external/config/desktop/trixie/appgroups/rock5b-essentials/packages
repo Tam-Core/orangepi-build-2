@@ -1,0 +1,10 @@
+# Debian 13 ARM64 desktop essentials for the experimental Rock 5B port.
+# Wallet/signer applications are intentionally NOT included until their
+# exact upstream sources, versions, licences and ARM64 tests are verified.
+keepassxc
+gnupg
+qrencode
+zbar-tools
+python3
+python3-venv
+ca-certificates

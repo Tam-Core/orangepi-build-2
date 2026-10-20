@@ -55,6 +55,17 @@ for entry in "$loader:32768" "$uboot:8388608"; do
 done
 sha256sum "$loader" "$uboot" "$dtb" "$root/boot/Image" "$root/boot/uInitrd" > "$report/components.sha256"
 
+# Reject optional application payloads; inspect the installed package inventory.
+awk 'BEGIN { RS=""; FS="\n" } /Status: install ok installed/ {
+    for (i=1; i<=NF; i++) if ($i ~ /^Package: /) print substr($i,10)
+}' "$root/var/lib/dpkg/status" | sort > "$report/installed-packages.txt"
+if grep -Eq '^(libreoffice.*|keepassxc|electrum.*|xfce4.*|lightdm|gdm3|qrencode|zbar-tools|mc|htop|nano|jq)$' "$report/installed-packages.txt"; then
+    echo 'FAIL: optional applications found in minimal image' >&2
+    exit 1
+fi
+test ! -e "$root/usr/local/bin/watchdog_test"
+test ! -e "$root/usr/local/test.mp4"
+grep -q '^orangepi:.*:0:' "$root/etc/shadow"
 # Export the full installed package inventory and account policy without hashes.
 cp "$root/var/lib/dpkg/status" "$report/dpkg-status.txt"
 awk -F: '{ print $1 ":" (($2 ~ /^[!*]/) ? "locked" : "password-enabled") }' \

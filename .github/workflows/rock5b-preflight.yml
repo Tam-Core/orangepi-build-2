@@ -1,0 +1,21 @@
+name: Rock 5B static preflight
+
+on:
+  push:
+    branches:
+      - feature/rock5b-debian13-bringup
+  pull_request:
+    branches:
+      - next
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    name: Check Rock 5B board definitions
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run static configuration checks
+        run: bash tests/rock5b-preflight.sh

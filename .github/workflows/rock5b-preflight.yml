@@ -19,3 +19,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Run static configuration checks
         run: bash tests/rock5b-preflight.sh
+
+      - name: Check effective configuration and existing board regression
+        run: bash tests/rock5b-effective-config.sh
+      - name: Check image inspector syntax
+        run: bash -n tests/rock5b-image-check.sh

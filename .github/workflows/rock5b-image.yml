@@ -12,7 +12,7 @@ permissions:
 
 concurrency:
   group: rock5b-image
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   image:
@@ -31,21 +31,51 @@ jobs:
           df -h .
           sudo apt-get update
           sudo apt-get install -y gawk uuid-runtime acl dialog whiptail
-      - name: Build CLI microSD image
+      - name: Configure staged CLI build
+        run: |
+          mkdir -p output/debug userpatches
+          touch .ignore_changes
+          cat > userpatches/config-rock5b-ci.conf <<'CONFIG'
+          BOARD=rock5b
+          BRANCH=next
+          RELEASE=trixie
+          LIB_TAG=feature/rock5b-debian13-bringup
+          KERNEL_CONFIGURE=no
+          BUILD_DESKTOP=no
+          BUILD_MINIMAL=yes
+          CLEAN_LEVEL=oldcache
+          USE_TORRENT=no
+          DOWNLOAD_MIRROR=mainline
+          GITHUB_MIRROR=github
+          NO_APT_CACHER=yes
+          SYNC_CLOCK=no
+          USE_CCACHE=no
+          EXTRAWIFI=no
+          INSTALL_HEADERS=no
+          BUILD_KSRC=no
+          INSTALL_KSRC=no
+          COMPRESS_OUTPUTIMAGE=sha,img
+          PROGRESS_DISPLAY=plain
+          PROGRESS_LOG_TO_FILE=yes
+          CONFIG
+      - name: Build U-Boot
+        timeout-minutes: 30
         shell: bash
         run: |
           set -o pipefail
-          mkdir -p output/debug userpatches
-          touch .ignore_changes
-          sudo env TERM=xterm bash build.sh \
-            LIB_TAG=feature/rock5b-debian13-bringup \
-            BOARD=rock5b BRANCH=next RELEASE=trixie BUILD_OPT=image \
-            KERNEL_CONFIGURE=no BUILD_DESKTOP=no BUILD_MINIMAL=yes \
-            USE_TORRENT=no DOWNLOAD_MIRROR=mainline GITHUB_MIRROR=github \
-            NO_APT_CACHER=yes SYNC_CLOCK=no USE_CCACHE=no \
-            EXTRAWIFI=no INSTALL_HEADERS=no BUILD_KSRC=no INSTALL_KSRC=no \
-            COMPRESS_OUTPUTIMAGE=sha,img PROGRESS_DISPLAY=plain \
-            PROGRESS_LOG_TO_FILE=yes 2>&1 | tee output/rock5b-build.log
+          sudo env TERM=xterm bash build.sh rock5b-ci BUILD_OPT=u-boot 2>&1 | tee output/rock5b-uboot.log
+      - name: Build Linux kernel and DTBs
+        timeout-minutes: 180
+        shell: bash
+        run: |
+          set -o pipefail
+          sudo env TERM=xterm bash build.sh rock5b-ci BUILD_OPT=kernel 2>&1 | tee output/rock5b-kernel.log
+      - name: Build Debian CLI microSD image
+        timeout-minutes: 60
+        shell: bash
+        run: |
+          set -o pipefail
+          sudo env TERM=xterm bash build.sh rock5b-ci BUILD_OPT=image 2>&1 | tee output/rock5b-image.log
       - name: Require generated image and record provenance
         shell: bash
         run: |
@@ -62,6 +92,7 @@ jobs:
             done > output/verification/dependency-revisions.txt
           for img in "${images[@]}"; do
             sudo fdisk -l "$img" > "output/verification/$(basename "$img").partitions.txt"
+            sudo bash tests/rock5b-image-check.sh "$img" "output/verification/$(basename "$img").checks"
             sha256sum "$img" >> output/verification/SHA256SUMS
             xz -T2 -k "$img"
             xz -t "$img.xz"
@@ -74,7 +105,7 @@ jobs:
         with:
           name: rock5b-build-evidence
           path: |
-            output/rock5b-build.log
+            output/rock5b-*.log
             output/debug/
             output/verification/
           if-no-files-found: warn

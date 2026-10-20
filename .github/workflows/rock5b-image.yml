@@ -5,6 +5,7 @@ on:
     branches: [feature/rock5b-debian13-bringup]
     paths:
       - '.github/workflows/rock5b-image.yml'
+      - 'scripts/general.sh'
   workflow_dispatch:
 
 permissions:

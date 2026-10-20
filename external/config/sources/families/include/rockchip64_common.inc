@@ -182,7 +182,13 @@ uboot_custom_postprocess()
 		trust_merger --replace bl31.elf $RKBIN_DIR/$BL31_BLOB trust.ini
 
         elif [[ $BOOT_SCENARIO == "spl-blobs" || $BOOT_SCENARIO == "tpl-blob-atf-mainline" ]]; then
-		if [[ $BOARD =~ orangepicm4|orangepi3b ]]; then
+		# The Orange Pi vendor postprocessor only creates idbloader.img
+		# for SPI-enabled RK3588 boards. Rock 5B must generate the same
+		# loader for microSD boot even though SPI flashing is disabled.
+		if [[ $BOARD == rock5b ]]; then
+			tools/mkimage -n rk3588 -T rksd \
+				-d "${RKBIN_DIR}/${DDR_BLOB}:spl/u-boot-spl.bin" idbloader.img
+		elif [[ $BOARD =~ orangepicm4|orangepi3b ]]; then
 			tools/mkimage -n rk3568 -T rksd -d $RKBIN_DIR/$DDR_BLOB:spl/u-boot-spl.bin idbloader.img
 		elif [[ $BOARD =~ orangepi4-lts|orangepi800 ]]; then
 			tools/mkimage -n rk3399 -T rksd -d $RKBIN_DIR/$DDR_BLOB:spl/u-boot-spl.bin idbloader.img

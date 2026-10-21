@@ -92,6 +92,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # The sudo build creates root-owned output; packaging runs as the runner.
+          sudo chown -R "$(id -u):$(id -g)" output
           mkdir -p output/images
           cp docs/rock5b-flashing.md output/images/FLASHING.md
           cp -r docs/licenses output/images/licenses

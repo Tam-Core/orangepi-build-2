@@ -43,9 +43,17 @@ jobs:
           touch .ignore_changes
           cp config/rock5b-minimal.conf userpatches/config-rock5b-ci.conf
           cp config/rock5b-customize.sh userpatches/customize-image.sh
-      # Reuse compilation from identical boot/kernel sources at 43e6258.
-      # Remove this recovery step if those sources or configurations change.
+      - name: Check whether previous compiled packages are reusable
+        id: recovery
+        run: |
+          git fetch --depth=1 origin 43e62581a7533c547420093aac766f0c9bc36879
+          if git diff --quiet FETCH_HEAD HEAD -- build.sh scripts/compilation.sh scripts/patching.sh external/config/kernel external/config/sources external/config/boards/rock5b.conf external/packages/blobs/rockchip; then
+            echo 'reusable=true' >> "$GITHUB_OUTPUT"
+          fi
       - name: Restore successful U-Boot and kernel compilation
+        id: compiled-restore
+        if: steps.recovery.outputs.reusable == 'true'
+        continue-on-error: true
         uses: actions/download-artifact@v4
         with:
           name: rock5b-compiled-packages
@@ -91,7 +99,11 @@ jobs:
           (( ${#images[@]} > 0 ))
           mkdir -p output/verification
           git rev-parse HEAD > output/verification/source-revision.txt
-          printf '%s\n' 'Compiled U-Boot/kernel: source 43e62581a7533c547420093aac766f0c9bc36879, Actions run 39507524758' > output/verification/compiled-package-origin.txt
+          if [[ '${{ steps.compiled-restore.outcome }}' == success ]]; then
+            printf '%s\n' 'Compiled U-Boot/kernel: source 43e62581a7533c547420093aac766f0c9bc36879, Actions run 39507524758' > output/verification/compiled-package-origin.txt
+          else
+            printf '%s\n' 'Packages built in this run or restored from the configuration-keyed cache; see build logs.' > output/verification/compiled-package-origin.txt
+          fi
           find output/debs -name '*.deb' -exec sha256sum {} + > output/verification/compiled-packages.sha256
           git status --porcelain > output/verification/source-status.txt
           find kernel u-boot-radxa-rock5b external/cache/sources -type d -name .git -prune |

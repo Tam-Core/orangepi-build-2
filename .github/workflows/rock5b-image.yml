@@ -117,7 +117,7 @@ jobs:
           # Ubuntu 22.04 matches the supported compilation host, running natively
           # on ARM64 here. Privilege is confined to this disposable CI runner.
           docker run --rm --privileged -e TERM=xterm -e DEBIAN_FRONTEND=noninteractive \
-            -v "$PWD:/work" -w /work ubuntu:22.04 bash -c '
+            -v "$PWD:/work" -v /dev:/tmp/dev:ro -w /work ubuntu:22.04 bash -c '
               set -euo pipefail
               apt-get update
               apt-get install -y sudo git gawk uuid-runtime acl dialog whiptail lsb-release locales

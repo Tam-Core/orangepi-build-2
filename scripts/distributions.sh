@@ -476,6 +476,7 @@ POST_INSTALL_KERNEL_DEBS
 	cp "${EXTER}"/packages/blobs/splash/orangepi-u-boot.bmp "${SDCARD}"/boot/boot.bmp
 	cp "${EXTER}"/packages/blobs/splash/logo.bmp "${SDCARD}"/boot/logo.bmp
 
+	if [[ $BOARD != rock5b || $BUILD_MINIMAL != yes ]]; then
 	# copy audio.wav and mute.wav
 	cp "${EXTER}"/packages/blobs/audio_wav/audio.wav "${SDCARD}"/usr/share/sounds/alsa/
 	cp "${EXTER}"/packages/blobs/audio_wav/mute.wav "${SDCARD}"/usr/share/sounds/alsa/
@@ -484,6 +485,8 @@ POST_INSTALL_KERNEL_DEBS
 
 	# copy watchdog test programm
 	cp "${EXTER}"/packages/blobs/watchdog/watchdog_test_${ARCH} "${SDCARD}"/usr/local/bin/watchdog_test
+
+	fi
 
 	[[ -f "${SDCARD}"/usr/bin/gnome-session ]] && sed -i "s/user-session.*/user-session=ubuntu-wayland/" ${SDCARD}/etc/lightdm/lightdm.conf.d/22-orangepi-autologin.conf > /dev/null 2>&1
 	[[ -f "${SDCARD}"/usr/bin/startplasma-x11 ]] && sed -i "s/user-session.*/user-session=plasma-x11/" ${SDCARD}/etc/lightdm/lightdm.conf.d/22-orangepi-autologin.conf

@@ -101,6 +101,14 @@ check_loop_device()
 
 	local device=$1
 	if [[ ! -b $device ]]; then
+		# Partition nodes are created asynchronously by the host's udev.
+		# Containers see them through the read-only /dev -> /tmp/dev mount.
+		if [[ $CONTAINER_COMPAT == yes ]]; then
+			for attempt in {1..50}; do
+				[[ -b /tmp/$device ]] && break
+				sleep 0.1
+			done
+		fi
 		if [[ $CONTAINER_COMPAT == yes && -b /tmp/$device ]]; then
 			display_alert "Creating device node" "$device"
 			mknod -m0660 "${device}" b "0x$(stat -c '%t' "/tmp/$device")" "0x$(stat -c '%T' "/tmp/$device")"

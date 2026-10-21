@@ -1381,6 +1381,7 @@ prepare_host_basic()
 			"gpg:gnupg"
 			"gawk:gawk"
 			"git:git"
+			"systemd-detect-virt:systemd"
 			)
 
 	for check_pack in "${checklist[@]}"; do

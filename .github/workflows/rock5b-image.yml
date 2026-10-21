@@ -120,8 +120,9 @@ jobs:
             -v "$PWD:/work" -v /dev:/tmp/dev:ro -w /work ubuntu:22.04 bash -c '
               set -euo pipefail
               apt-get update
-              apt-get install -y sudo git gawk uuid-runtime acl dialog whiptail lsb-release locales
+              apt-get install -y sudo git gawk uuid-runtime acl dialog whiptail lsb-release locales systemd fdisk
               locale-gen en_US.UTF-8
+              bash tests/rock5b-container-loop.sh
               git config --global --add safe.directory /work
               bash build.sh rock5b-ci BUILD_OPT=image 2>&1 | tee output/rock5b-image.log
             '

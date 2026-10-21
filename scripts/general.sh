@@ -1431,7 +1431,7 @@ prepare_host()
 	local hostdeps="acl aptly aria2 bc binfmt-support bison btrfs-progs       \
 	build-essential  ca-certificates ccache cpio cryptsetup curl              \
 	debian-archive-keyring debian-keyring debootstrap device-tree-compiler    \
-	dialog dirmngr dosfstools dwarves f2fs-tools fakeroot flex gawk           \
+	dialog dirmngr dosfstools dwarves e2fsprogs f2fs-tools fakeroot fdisk flex gawk           \
 	gcc-arm-linux-gnueabihf gdisk gpg imagemagick jq kmod libbison-dev \
 	libc6-dev-armhf-cross libelf-dev libfdt-dev libfile-fcntllock-perl        \
 	libfl-dev liblz4-tool libncurses-dev libpython2.7-dev libssl-dev          \

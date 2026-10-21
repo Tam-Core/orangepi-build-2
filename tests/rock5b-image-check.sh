@@ -98,7 +98,7 @@ for path in (root/'etc/systemd/system').rglob('*'):
     if path.is_file() and not path.is_symlink():
         assert '--autologin' not in path.read_text(errors='replace'), f'autologin: {path}'
 PY
-for unit in ssh.service ssh.socket orangepi-firstrun.service orangepi-firstrun-config.service; do
+for unit in ssh.service ssh.socket orangepi-firstrun.service orangepi-firstrun-config.service orangepi-hardware-monitor.service; do
     [[ $(readlink "$root/etc/systemd/system/$unit") == /dev/null ]]
 done
 [[ $(readlink "$root/etc/systemd/system/default.target") == /usr/lib/systemd/system/multi-user.target ]]

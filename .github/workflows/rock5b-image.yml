@@ -134,6 +134,7 @@ jobs:
           cp docs/rock5b-flashing.md output/images/FLASHING.md
           mkdir -p output/images/verification
           git rev-parse HEAD > output/images/IMAGE-SOURCE-REVISION.txt
+          git archive HEAD | xz -T2 > output/images/sources/image-assembly-builder.tar.xz
           cp output/images/COMPILED-PACKAGES-SHA256SUMS.txt output/images/verification/
           # Verify the compiled inputs survived transport; the BSP is rebuilt
           # for this image, while U-Boot, kernel and DTB inputs are reused.
@@ -153,7 +154,7 @@ jobs:
           done
           printf '%s\n' 'PASS: automated image checks. Physical boot and peripherals remain UNTESTED.' > output/images/verification/STATUS.txt
           # Every shipped file is covered; the uncompressed image is omitted.
-          (cd output/images && find . -type f ! -name '*.img' ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
+          (cd output/images && find -L . -type f ! -name '*.img' ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
           (cd output/images && sha256sum -c SHA256SUMS)
       - name: Preserve build evidence
         if: always()

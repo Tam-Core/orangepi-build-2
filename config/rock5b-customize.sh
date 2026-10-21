@@ -11,6 +11,8 @@ chage -d 0 orangepi
 # the fixed local-login policy. Keep the separate filesystem-resize service.
 systemctl disable orangepi-firstrun.service orangepi-firstrun-config.service
 systemctl mask orangepi-firstrun.service orangepi-firstrun-config.service
+systemctl disable orangepi-hardware-monitor.service
+systemctl mask orangepi-hardware-monitor.service
 rm -f /root/.not_logged_in_yet
 systemctl disable ssh.service ssh.socket
 systemctl mask ssh.service ssh.socket

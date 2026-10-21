@@ -60,6 +60,8 @@ create_board_package()
 	# (distributions provide good defaults, so this is not needed currently)
 	# Depends: linux-base is needed for "linux-version" command in initrd cleanup script
 	# Depends: fping is needed for orangepimonitor to upload orangepi-hardware-monitor.log
+	local monitor_dependency=", fping"
+	[[ $BOARD == rock5b && $BUILD_MINIMAL == yes ]] && monitor_dependency=""
 	cat <<-EOF > "${destination}"/DEBIAN/control
 	Package: ${BSP_CLI_PACKAGE_NAME}
 	Version: $REVISION
@@ -68,7 +70,7 @@ create_board_package()
 	Installed-Size: 1
 	Section: kernel
 	Priority: optional
-	Depends: bash, linux-base, u-boot-tools, initramfs-tools, lsb-release, fping
+	Depends: bash, linux-base, u-boot-tools, initramfs-tools, lsb-release${monitor_dependency}
 	Provides: linux-${RELEASE}-root-legacy-$BOARD, linux-${RELEASE}-root-current-$BOARD, linux-${RELEASE}-root-next-$BOARD
 	Suggests: orangepi-config
 	Replaces: zram-config, base-files, orangepi-tools-$RELEASE, linux-${RELEASE}-root-legacy-$BOARD (<< $REVISION~), linux-${RELEASE}-root-current-$BOARD (<< $REVISION~), linux-${RELEASE}-root-next-$BOARD (<< $REVISION~)

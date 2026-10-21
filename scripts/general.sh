@@ -1381,6 +1381,7 @@ prepare_host_basic()
 			"gpg:gnupg"
 			"gawk:gawk"
 			"git:git"
+			"systemd-detect-virt:systemd"
 			)
 
 	for check_pack in "${checklist[@]}"; do
@@ -1431,7 +1432,7 @@ prepare_host()
 	local hostdeps="acl aptly aria2 bc binfmt-support bison btrfs-progs       \
 	build-essential  ca-certificates ccache cpio cryptsetup curl              \
 	debian-archive-keyring debian-keyring debootstrap device-tree-compiler    \
-	dialog dirmngr dosfstools dwarves f2fs-tools fakeroot flex gawk           \
+	dialog dirmngr dosfstools dwarves e2fsprogs f2fs-tools fakeroot fdisk flex gawk           \
 	gcc-arm-linux-gnueabihf gdisk gpg imagemagick jq kmod libbison-dev \
 	libc6-dev-armhf-cross libelf-dev libfdt-dev libfile-fcntllock-perl        \
 	libfl-dev liblz4-tool libncurses-dev libpython2.7-dev libssl-dev          \
@@ -1598,6 +1599,15 @@ prepare_host()
 				)
 			;;
 		esac
+
+		# The experimental Rock 5B port needs only its AArch64 U-Boot and
+		# kernel compilers, rather than the full multi-board toolchain set.
+		if [[ ${BOARD} == rock5b && ${BOARDFAMILY} == rockchip-rk3588 ]]; then
+			toolchains=(
+				"gcc-linaro-7.4.1-2019.02-x86_64_aarch64-linux-gnu.tar.xz"
+				"gcc-arm-11.2-2022.02-x86_64-aarch64-none-linux-gnu.tar.xz"
+			)
+		fi
 
 		USE_TORRENT_STATUS=${USE_TORRENT}
 		USE_TORRENT="no"

@@ -1,0 +1,52 @@
+name: Transfer verified ROCK 5B artifact
+on:
+  push:
+    branches: [rock5b-minimal-microsd]
+    paths: ['.github/workflows/rock5b-artifact-transfer.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  transfer:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - name: Download and verify original successful artifact ZIP
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --header "Authorization: Bearer $GH_TOKEN" \
+            --header 'Accept: application/vnd.github+json' \
+            https://api.github.com/repos/Tam-Core/orangepi-build-2/actions/artifacts/12388491291/zip \
+            --output rock5b-debian13-cli-image.zip
+          echo '0bec3c7b482ff84fea877e3e345c1cc19ca861af0115e04c9d5db5735c8c0b5c  rock5b-debian13-cli-image.zip' | sha256sum -c -
+          unzip -t rock5b-debian13-cli-image.zip > archive-integrity.txt
+          split -b 384M -d -a 2 rock5b-debian13-cli-image.zip rock5b-debian13-cli-image.zip.part-
+          sha256sum rock5b-debian13-cli-image.zip.part-* > TRANSFER-SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rock5b-image-transfer-part-00
+          path: rock5b-debian13-cli-image.zip.part-00
+          compression-level: 0
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rock5b-image-transfer-part-01
+          path: rock5b-debian13-cli-image.zip.part-01
+          compression-level: 0
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rock5b-image-transfer-part-02
+          path: rock5b-debian13-cli-image.zip.part-02
+          compression-level: 0
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rock5b-image-transfer-checksums
+          path: |
+            TRANSFER-SHA256SUMS
+            archive-integrity.txt
+          retention-days: 14

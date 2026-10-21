@@ -1,0 +1,179 @@
+name: Rock 5B CLI image build
+
+on:
+  push:
+    branches: [rock5b-minimal-microsd]
+    paths:
+      - '.github/workflows/rock5b-image.yml'
+      - 'scripts/**'
+      - 'config/**'
+      - 'external/config/boards/rock5b.conf'
+      - 'external/config/sources/families/**'
+      - 'tests/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: rock5b-image
+  cancel-in-progress: true
+
+jobs:
+  compile:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Static preflight
+        run: |
+          bash tests/rock5b-preflight.sh
+          bash tests/rock5b-effective-config.sh
+          bash tests/package-lists.sh
+      - name: Prepare disposable compilation runner
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup
+          sudo apt-get update
+          sudo apt-get install -y gawk uuid-runtime acl dialog whiptail
+          mkdir -p output/debug userpatches
+          touch .ignore_changes
+          cp config/rock5b-minimal.conf userpatches/config-rock5b-ci.conf
+          cp config/rock5b-customize.sh userpatches/customize-image.sh
+      - uses: actions/cache@v4
+        id: packages
+        with:
+          path: |
+            output/debs
+            output/release-sources
+            output/rock5b-uboot.log
+            output/rock5b-kernel.log
+          key: rock5b-provenance-v2-${{ hashFiles('build.sh', 'scripts/compilation.sh', 'scripts/patching.sh', 'scripts/rock5b-bundle-sources.sh', 'external/config/kernel/**', 'external/config/sources/**', 'external/config/boards/rock5b.conf', 'external/patch/**', 'external/packages/blobs/rockchip/**') }}
+      - name: Build U-Boot
+        if: steps.packages.outputs.cache-hit != 'true'
+        timeout-minutes: 30
+        run: |
+          set -o pipefail
+          sudo env TERM=xterm bash build.sh rock5b-ci BUILD_OPT=u-boot 2>&1 | tee output/rock5b-uboot.log
+      - name: Build Linux kernel, DTBs and corresponding source
+        if: steps.packages.outputs.cache-hit != 'true'
+        timeout-minutes: 180
+        run: |
+          set -o pipefail
+          sudo env TERM=xterm bash build.sh rock5b-ci BUILD_OPT=kernel 2>&1 | tee output/rock5b-kernel.log
+      - name: Collect exact compiled sources and licences
+        if: steps.packages.outputs.cache-hit != 'true'
+        run: |
+          sudo chown -R "$(id -u):$(id -g)" output
+          bash scripts/rock5b-bundle-sources.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rock5b-compiled-packages
+          path: output/debs/**/*.deb
+          compression-level: 0
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rock5b-component-sources
+          path: output/release-sources/
+          compression-level: 0
+          retention-days: 14
+      - name: Preserve compilation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rock5b-compilation-evidence
+          path: |
+            output/rock5b-*.log
+            output/debug/
+          retention-days: 14
+
+  image:
+    needs: compile
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: rock5b-compiled-packages
+          path: output/debs
+      - uses: actions/download-artifact@v4
+        with:
+          name: rock5b-component-sources
+          path: output/images
+      - name: Build Debian CLI microSD image natively on ARM64
+        timeout-minutes: 140
+        run: |
+          set -euo pipefail
+          mkdir -p output/debug userpatches
+          touch .ignore_changes
+          cp config/rock5b-minimal.conf userpatches/config-rock5b-ci.conf
+          cp config/rock5b-customize.sh userpatches/customize-image.sh
+          # Ubuntu 22.04 matches the supported compilation host, running natively
+          # on ARM64 here. Privilege is confined to this disposable CI runner.
+          docker run --rm --privileged -e TERM=xterm -e DEBIAN_FRONTEND=noninteractive \
+            -v "$PWD:/work" -v /dev:/tmp/dev:ro -w /work ubuntu:22.04 bash -c '
+              set -euo pipefail
+              apt-get update
+              apt-get install -y sudo git gawk uuid-runtime acl dialog whiptail lsb-release locales systemd fdisk
+              locale-gen en_US.UTF-8
+              bash tests/rock5b-container-loop.sh
+              git config --global --add safe.directory /work
+              bash build.sh rock5b-ci BUILD_OPT=image 2>&1 | tee output/rock5b-image.log
+            '
+      - name: Verify image and package flash bundle
+        run: |
+          set -euo pipefail
+          sudo chown -R "$(id -u):$(id -g)" output
+          sudo apt-get update
+          sudo apt-get install -y u-boot-tools device-tree-compiler initramfs-tools-core python3
+          cp docs/rock5b-flashing.md output/images/FLASHING.md
+          mkdir -p output/images/verification
+          git rev-parse HEAD > output/images/IMAGE-SOURCE-REVISION.txt
+          git archive HEAD | xz -T2 > output/images/sources/image-assembly-builder.tar.xz
+          cp output/images/COMPILED-PACKAGES-SHA256SUMS.txt output/images/verification/
+          # Verify the compiled inputs survived transport; the BSP is rebuilt
+          # for this image, while U-Boot, kernel and DTB inputs are reused.
+          grep -E 'output/debs/(u-boot/|linux-(image|dtb|source|headers))' output/images/COMPILED-PACKAGES-SHA256SUMS.txt | sha256sum -c -
+          find kernel u-boot-radxa-rock5b external/cache/sources -type d -name .git -prune |
+            while read -r gitdir; do
+              printf '%s %s\n' "${gitdir%/.git}" "$(git -c safe.directory="*" -C "${gitdir%/.git}" rev-parse HEAD)"
+            done > output/images/verification/image-stage-dependency-revisions.txt
+          mapfile -t images < <(find output/images -type f -name '*.img')
+          [[ ${#images[@]} == 1 ]]
+          for img in "${images[@]}"; do
+            sudo fdisk -l "$img" > output/images/verification/partitions.txt
+            sudo bash tests/rock5b-image-check.sh "$img" output/images/verification
+            cp -a output/images/verification/licenses/. output/images/licenses/
+            xz -T2 -k "$img"
+            xz -t "$img.xz"
+          done
+          printf '%s\n' 'PASS: automated image checks. Physical boot and peripherals remain UNTESTED.' > output/images/verification/STATUS.txt
+          # Every shipped file is covered; the uncompressed image is omitted.
+          (cd output/images && find -L . -type f ! -name '*.img' ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
+          (cd output/images && sha256sum -c SHA256SUMS)
+      - name: Preserve build evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rock5b-build-evidence
+          path: |
+            output/rock5b-*.log
+            output/debug/
+            output/images/verification/
+          retention-days: 14
+      - name: Preserve image
+        uses: actions/upload-artifact@v4
+        with:
+          name: rock5b-debian13-cli-image
+          path: |
+            output/images/**
+            !output/images/**/*.img
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14

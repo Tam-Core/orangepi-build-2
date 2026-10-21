@@ -14,6 +14,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: rock5b-image
@@ -42,6 +43,15 @@ jobs:
           touch .ignore_changes
           cp config/rock5b-minimal.conf userpatches/config-rock5b-ci.conf
           cp config/rock5b-customize.sh userpatches/customize-image.sh
+      # Reuse compilation from identical boot/kernel sources at 43e6258.
+      # Remove this recovery step if those sources or configurations change.
+      - name: Restore successful U-Boot and kernel compilation
+        uses: actions/download-artifact@v4
+        with:
+          name: rock5b-compiled-packages
+          path: output/debs
+          run-id: 39507524758
+          github-token: ${{ github.token }}
       - uses: actions/cache@v4
         with:
           path: output/debs
@@ -65,7 +75,7 @@ jobs:
           path: output/debs/**/*.deb
           retention-days: 14
       - name: Build Debian CLI microSD image
-        timeout-minutes: 60
+        timeout-minutes: 180
         shell: bash
         run: |
           set -o pipefail
@@ -81,6 +91,8 @@ jobs:
           (( ${#images[@]} > 0 ))
           mkdir -p output/verification
           git rev-parse HEAD > output/verification/source-revision.txt
+          printf '%s\n' 'Compiled U-Boot/kernel: source 43e62581a7533c547420093aac766f0c9bc36879, Actions run 39507524758' > output/verification/compiled-package-origin.txt
+          find output/debs -name '*.deb' -exec sha256sum {} + > output/verification/compiled-packages.sha256
           git status --porcelain > output/verification/source-status.txt
           find kernel u-boot-radxa-rock5b external/cache/sources -type d -name .git -prune |
             while read -r gitdir; do
@@ -90,10 +102,10 @@ jobs:
           for img in "${images[@]}"; do
             sudo fdisk -l "$img" > "output/verification/$(basename "$img").partitions.txt"
             sudo bash tests/rock5b-image-check.sh "$img" "output/verification/$(basename "$img").checks"
-            (cd "$(dirname "$img")" && sha256sum "$(basename "$img")") >> output/images/SHA256SUMS
+            (cd output/images && sha256sum "${img#output/images/}") >> output/images/SHA256SUMS
             xz -T2 -k "$img"
             xz -t "$img.xz"
-            (cd "$(dirname "$img")" && sha256sum "$(basename "$img.xz")") >> output/images/SHA256SUMS
+            (cd output/images && sha256sum "${img#output/images/}.xz") >> output/images/SHA256SUMS
           done
           printf '%s\n' 'Image generated; hardware boot and peripherals remain UNTESTED.' > output/verification/STATUS.txt
       - name: Preserve build evidence

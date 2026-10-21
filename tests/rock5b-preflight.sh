@@ -27,6 +27,7 @@ grep -Fq 'idbloader.img' "$common"
 
 bash -n "$root/config/rock5b-minimal.conf" "$root/config/rock5b-customize.sh"
 grep -qx 'BUILD_DESKTOP=no' "$root/config/rock5b-minimal.conf"
+grep -qx 'DEST_LANG=en_US.UTF-8' "$root/config/rock5b-minimal.conf"
 grep -qx 'BUILD_MINIMAL=yes' "$root/config/rock5b-minimal.conf"
 
 printf '%s\n' 'PASS: Rock 5B configuration and minimal Debian 13 static checks'

@@ -383,7 +383,11 @@ POST_INSTALL_KERNEL_DEBS
 	fi
 
 	# install orangepi-firmware
-	if [[ "${REPOSITORY_INSTALL}" != *orangepi-firmware* ]]; then
+	if [[ $BOARD == rock5b && $BUILD_MINIMAL == yes ]]; then
+		# ROCK 5B's onboard Ethernet needs Realtek firmware, not the full
+		# Orange Pi firmware collection. Debian supplies its copyright notices.
+		chroot "${SDCARD}" /bin/bash -c "DEBIAN_FRONTEND=noninteractive apt-get -y --no-install-recommends install firmware-realtek" >> "${DEST}"/${LOG_SUBPATH}/install.log 2>&1 || exit_with_error "Realtek firmware installation failed"
+	elif [[ "${REPOSITORY_INSTALL}" != *orangepi-firmware* ]]; then
 		if [[ -f ${DEB_STORAGE}/orangepi-firmware_${REVISION}_all.deb ]]; then
 			install_deb_chroot "${DEB_STORAGE}/orangepi-firmware_${REVISION}_all.deb"
 		fi

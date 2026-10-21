@@ -7,7 +7,13 @@ rm -f /usr/share/sounds/alsa/audio.wav /usr/share/sounds/alsa/mute.wav
 # Keep the first login local and require replacement of public initial passwords.
 chage -d 0 root
 chage -d 0 orangepi
-systemctl disable ssh.service 2>/dev/null || true
-systemctl disable ssh.socket 2>/dev/null || true
+# Vendor firstrun restarts SSH; its optional account wizard must not override
+# the fixed local-login policy. Keep the separate filesystem-resize service.
+systemctl disable orangepi-firstrun.service orangepi-firstrun-config.service
+systemctl mask orangepi-firstrun.service orangepi-firstrun-config.service
+rm -f /root/.not_logged_in_yet
+systemctl disable ssh.service ssh.socket
+systemctl mask ssh.service ssh.socket
+rm -f /etc/ssh/ssh_host_*
 systemctl set-default multi-user.target
 printf '%s\n' 'Radxa ROCK 5B — minimal Debian 13 ARM64' > /etc/issue

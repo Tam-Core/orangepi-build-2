@@ -24,3 +24,5 @@ jobs:
         run: bash tests/rock5b-effective-config.sh
       - name: Check image inspector syntax
         run: bash -n tests/rock5b-image-check.sh
+      - name: Check exact package exclusions
+        run: bash tests/package-lists.sh

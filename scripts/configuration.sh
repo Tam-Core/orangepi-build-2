@@ -678,17 +678,11 @@ unset aggregated_content
 
 if [[ -n $PACKAGE_LIST_RM ]]; then
 	display_alert "Package remove list ${PACKAGE_LIST_RM}"
-	# Turns out that \b can be tricked by dashes.
-	# So if you remove mesa-utils but still want to install "mesa-utils-extra"
-	# a "\b(mesa-utils)\b" filter will convert "mesa-utils-extra" to "-extra".
-	# \W is not tricked by this but consumes the surrounding spaces, so we
-	# replace the occurence by one space, to avoid sticking the next word to
-	# the previous one after consuming the spaces.
-	DEBOOTSTRAP_LIST=$(sed -r "s/\W($(tr ' ' '|' <<< ${PACKAGE_LIST_RM}))\W/ /g" <<< " ${DEBOOTSTRAP_LIST} ")
-	PACKAGE_LIST=$(sed -r "s/\W($(tr ' ' '|' <<< ${PACKAGE_LIST_RM}))\W/ /g" <<< " ${PACKAGE_LIST} ")
-	PACKAGE_MAIN_LIST=$(sed -r "s/\W($(tr ' ' '|' <<< ${PACKAGE_LIST_RM}))\W/ /g" <<< " ${PACKAGE_MAIN_LIST} ")
+	source "${SRC}/scripts/package-lists.sh"
+	for package_variable in DEBOOTSTRAP_LIST PACKAGE_LIST PACKAGE_MAIN_LIST PACKAGE_LIST_DESKTOP PACKAGE_LIST_FAMILY PACKAGE_LIST_BOARD; do
+		printf -v "$package_variable" '%s' "$(exclude_packages "${!package_variable}" "$PACKAGE_LIST_RM")"
+	done
 	if [[ $BUILD_DESKTOP == "yes" ]]; then
-		PACKAGE_LIST_DESKTOP=$(sed -r "s/\W($(tr ' ' '|' <<< ${PACKAGE_LIST_RM}))\W/ /g" <<< " ${PACKAGE_LIST_DESKTOP} ")
 		# Removing double spaces... AGAIN, since we might have used a sed on them
 		# Do not quote the variables. This would defeat the trick.
 		PACKAGE_LIST_DESKTOP="$(echo ${PACKAGE_LIST_DESKTOP})"
